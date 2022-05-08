@@ -129,10 +129,10 @@ def validateData(df):
     df = df[~df['EVENT_NO_TRIP'].isin(violationTripIds)]
 
     # GPS_HDOP value is always in the range 0 - 20
-    def filter_by_direction(direction):
-        return float(direction) >= 0 and float(direction) <= 20
+    def filter_by_hdop(gps_hdop):
+        return float(gps_hdop) >= 0 and float(gps_hdop) <= 20
 
-    df = df[df['GPS_HDOP'].apply(filter_by_direction)]
+    df = df[df['GPS_HDOP'].apply(filter_by_hdop)]
 
     # GPS_SATELLITES can never be 0, negative or empty
     def filter_by_gps_satellite_count(satellites):
