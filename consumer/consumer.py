@@ -36,7 +36,7 @@ import csv
 from dateutil import parser
 DBname = "postgres"
 DBuser = "postgres"
-DBpwd = "qwerty"
+DBpwd = "root123"
 MI_PER_HOUR_CONVERSION_FACTOR = 2.237
 
 # connect to the database
@@ -151,6 +151,43 @@ def validateData(df):
 
     df = df[df['GPS_LATITUDE'].apply(filter_by_GPS_LATITUDE)]
 
+    #LIMIT ASSERTION  METERS must always be greater than equal to zero
+
+    def filter_by_meters(mtr):
+	    return float(mtr) >= 0
+
+    df = df.dropna(subset=['METERS'],how='any')
+
+
+    df['METERS'] = pd.to_numeric(df['METERS'])
+
+    df = df[df['METERS'].apply(filter_by_meters)]
+
+
+    #INTER-RECORD ASSERTION EVENT_NO_TRIP VALUE SHOULD ALWAYS BE LESSER THAN EVENT_NO_STOP
+
+    def filter_by_event_no_trip(trp):
+      return float(trp)>=0
+
+    def filter_by_event_no_stop(trp):
+      return float(trp)>=0
+
+    def validTrip(event):
+      return event['EVENT_NO_TRIP']<=event['EVENT_NO_STOP']
+
+    df=df.dropna(subset=['EVENT_NO_TRIP','EVENT_NO_STOP'],how='any')
+
+    df['EVENT_NO_TRIP']=pd.to_numeric(df['EVENT_NO_TRIP'])
+
+    df['EVENT_NO_STOP']=pd.to_numeric(df['EVENT_NO_STOP'])
+
+
+    df=df[df['EVENT_NO_TRIP'].apply(filter_by_event_no_trip)]
+
+    df=df[df['EVENT_NO_STOP'].apply(filter_by_event_no_stop)]
+
+    df=df[df.apply(lambda row:validTrip(row),axis=1)]
+
     return df
 
 def load_data(df):
@@ -172,17 +209,17 @@ def load_data(df):
         else:
             day = 'Weekday'
         return day
-        
+
     def getTimestamp(row):
         dt = parser.parse(row['OPD_DATE'])
         fulldate = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
         fulldate = fulldate + datetime.timedelta(seconds=int(row['ACT_TIME']))
         return fulldate
-        
+
     def getSpeed(row):
         velocity = float(row['VELOCITY'])
         return velocity * MI_PER_HOUR_CONVERSION_FACTOR
-     
+
     tripTableDf = df.drop(['EVENT_NO_STOP', 'METERS', 'ACT_TIME', 'RADIO_QUALITY', 'VELOCITY', 'GPS_LONGITUDE', 'GPS_LATITUDE', 'GPS_SATELLITES', 'GPS_HDOP', 'SCHEDULE_DEVIATION'], axis = 1)    
     tripTableDf = tripTableDf.rename(columns={"EVENT_NO_TRIP": "TRIP_ID"})
     tripTableDf = tripTableDf.drop_duplicates(subset='TRIP_ID')
@@ -190,9 +227,9 @@ def load_data(df):
     tripTableDf = tripTableDf.drop(['OPD_DATE'], axis = 1)
     tripTableDf['DIRECTION'] = tripTableDf.apply(lambda row: populateDirection(row), axis=1)
     tripTableDf['route_id'] = 0
-    
+
     print(tripTableDf)
-    
+
     breadCrumbDf = df.drop(['EVENT_NO_STOP', 'VEHICLE_ID', 'METERS', 'RADIO_QUALITY', 'GPS_SATELLITES', 'GPS_HDOP', 'SCHEDULE_DEVIATION'], axis = 1)
     breadCrumbDf = breadCrumbDf.rename(columns={"EVENT_NO_TRIP": "TRIP_ID", "GPS_LONGITUDE": "longitude", "GPS_LATITUDE": "latitude"})
     breadCrumbDf['ACT_TIME'] = breadCrumbDf.apply(lambda row: getTimestamp(row), axis=1)
@@ -200,12 +237,11 @@ def load_data(df):
     breadCrumbDf['VELOCITY'] = breadCrumbDf.apply(lambda row: getSpeed(row), axis=1)
     breadCrumbDf = breadCrumbDf.rename(columns={'ACT_TIME':'tstamp', "VELOCITY":"speed"})
     print(breadCrumbDf)
-    
+
     conn = dbconnect()
     execute_batch_Trip(conn, tripTableDf)
     execute_batch_breadCrumb(conn, breadCrumbDf)
 
-    
 if __name__ == '__main__':
 
     # Read arguments and configurations and initialize
